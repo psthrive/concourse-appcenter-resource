@@ -46,7 +46,7 @@ cd $source/$path
 response=$(create_release_uploads)
 url=$(echo $response | jq -r '.upload_url')
 
-echo "file uploading..."
+echo "file uploadingssss..."
 echo $url
 status=$(curl -w %{http_code} -F "ipa=@$binary_name" $url)
 echo $status
