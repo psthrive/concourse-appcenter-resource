@@ -1,4 +1,4 @@
-FROM tomoyukim:concourse-appcenter-resource
+FROM ubuntu:bionic
 LABEL maintainer="Shashank Savanth <savanth.shashank@gmail.com>"
 COPY assets/* /opt/resource/
 
