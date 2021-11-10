@@ -47,8 +47,9 @@ response=$(create_release_uploads)
 url=$(echo $response | jq -r '.upload_url')
 
 echo "file uploading..."
+echo $url
 status=$(curl -w %{http_code} -F "ipa=@$binary_name" $url)
-
+echo $status
 if [ $status -lt 200 ] || [ $status -gt 299 ]; then
   echo "api error: $(echo $response | jq -r '.message')"
   exit 1
