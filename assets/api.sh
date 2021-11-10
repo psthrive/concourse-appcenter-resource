@@ -52,7 +52,7 @@ update_release_uploads_status() {
   --header "X-API-Token: $API_TOKEN" \
   -o $RESPONSE \
   --data "{ \"status\": \"$rel_status\"}" \
-  "https://api.appcenter.ms/v0.1/apps/$OWNER/$APP_NAME/release_uploads/$upload_id")
+  "https://api.appcenter.ms/v0.1/apps/$OWNER/$APP_NAME/uploads/releases/$upload_id")
 
   if [ $status -lt 200 ] || [ $status -gt 299 ]; then
     echo "update release_uploads status error: $(cat $RESPONSE | jq -r '.message')"
