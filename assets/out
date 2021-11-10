@@ -18,6 +18,7 @@ cat > $payload <&0
 export API_TOKEN=$(jq -r '.source.api_token // ""' < $payload)
 export OWNER=$(jq -r '.source.owner // ""' < $payload)
 export APP_NAME=$(jq -r '.source.app_name // ""' < $payload)
+export TYPE=$(jq -r '.source.type // ""' < $payload)
 
 if [ -z "$API_TOKEN" ]; then
   echo "invalid payload (missing token)"
@@ -40,23 +41,107 @@ path=$(jq -r '.params.path // ""' < $payload)
 binary_name=$(jq --arg dn $app_name -r '.params.binary_name // $dn' < $payload)
 release_notes=$(jq -r '.params.release_notes // ""' < $payload)
 
+if [ -z "$TYPE" ]; then
+  ext=${binary_name##*.}
+  case $ext in
+    apk)
+      TYPE=android
+      ;;
+    ipa)
+      TYPE=ios
+      ;;
+    *)
+      echo "could not determine file type for $binary_name"
+      exit 1
+  esac
+fi
+
 ## release uploads
 cd $source/$path
 
+echo "creating release upload"
 response=$(create_release_uploads)
-url=$(echo $response | jq -r '.upload_url')
+# url=$(echo $response | jq -r '.upload_url')
 
-echo "file uploadingssss..."
-echo $url
-status=$(curl -w %{http_code} -F "ipa=@$binary_name" $url)
-echo $status
-if [ $status -lt 200 ] || [ $status -gt 299 ]; then
-  echo "api error: $(echo $response | jq -r '.message')"
-  exit 1
-fi
+echo "file uploading..."
+# status=$(curl -w %{http_code} -F "ipa=@$binary_name" $url)
 
-upload_id=$(echo $response | jq -r '.upload_id')
-release_id=$(update_release_uploads_status $upload_id "committed" | jq -r '.release_id')
+# if [ $status -lt 200 ] || [ $status -gt 299 ]; then
+#   echo "api error: $(echo $response | jq -r '.message')"
+#   exit 1
+# fi
+
+# upload_id=$(echo $response | jq -r '.upload_id')
+# release_id=$(update_release_uploads_status $upload_id "committed" | jq -r '.release_id')
+
+url_encoded_token=$(echo $response | jq -j '.url_encoded_token')
+package_asset_id=$(echo $response | jq -j '.package_asset_id')
+upload_id=$(echo $response | jq -j '.id')
+upload_domain=$(echo $response | jq -j '.upload_domain')
+
+file_size_bytes=$(wc -c "$binary_name" | awk '{print $1}')
+case "$TYPE" in
+    android)
+        app_type='application/vnd.android.package-archive'
+        ;;
+    ios)
+        app_type='application/octet-stream'
+        ;;
+    *)
+        echo "invalid type '$TYPE'; must be either 'android' or 'ios'"
+        exit 1
+        ;;
+esac
+
+metadata_url="https://file.appcenter.ms/upload/set_metadata/$package_asset_id?file_name=$binary_name&file_size=$file_size_bytes&token=$url_encoded_token&content_type=$app_type"
+
+response=$(curl -d POST \
+                -H "Content-Type: application/json" \
+                -H "Accept: application/json" \
+                -H "X-API-Token: $API_TOKEN" \
+                "$metadata_url")
+chunk_size=$(echo $response | jq -j '.chunk_size')
+
+mkdir -p /tmp/chunks
+split -b $chunk_size $binary_name /tmp/chunks/chunk
+block_number=0
+for i in /tmp/chunks/chunk*; do
+    echo "uploading chunk $block_number..."
+    block_number=$(($block_number + 1))
+    content_length=$(wc -c "$i" | awk '{print $1}')
+
+    upload_chunk_url="https://file.appcenter.ms/upload/upload_chunk/$package_asset_id?token=$url_encoded_token&block_number=$block_number"
+
+    curl -X POST \
+         --data-binary "@$i" \
+         -H "Content-Length: $content_length" \
+         -H "Content-Type: $app_type" \
+         $upload_chunk_url
+done
+
+echo "marking upload finished"
+finished_url="https://file.appcenter.ms/upload/finished/$package_asset_id?token=$url_encoded_token"
+curl -d POST \
+     -H "Content-Type: application/json" \
+     -H "Accept: application/json" \
+     -H "X-API-Token: $API_TOKEN" \
+     "$finished_url"
+
+commit_url="https://api.appcenter.ms/v0.1/apps/$OWNER_NAME/$APP_NAME/uploads/releases/$upload_id"
+curl -H "Content-Type: application/json" \
+     -H "Accept: application/json" \
+     -H "X-API-Token: $API_TOKEN" \
+     --data '{"upload_status": "uploadFinished","id": "$upload_id"}' \
+     -X PATCH \
+     $commit_url
+
+echo "getting release ID..."
+release_status_url="https://api.appcenter.ms/v0.1/apps/$OWNER_NAME/$APP_NAME/uploads/releases/$upload_id"
+poll_result=$(curl -H "Content-Type: application/json" \
+                   -H "Accept: application/json" \
+                   -H "X-API-Token: $API_TOKEN" \
+                   $release_status_url)
+release_id=$(echo $poll_result | jq -r '.id')
 echo "Release ID: $release_id"
 
 if [ -n "$release_notes" ]; then
