@@ -12,7 +12,7 @@ create_release_uploads() {
   --header 'Accept: application/json' \
   --header "X-API-Token: $API_TOKEN" \
   -o $RESPONSE \
-  "https://api.appcenter.ms/v0.1/apps/$OWNER/$APP_NAME/release_uploads")
+  "https://api.appcenter.ms/v0.1/apps/$OWNER/$APP_NAME/uploads/releases")
 
   if [ $status -lt 200 ] || [ $status -gt 299 ]; then
     echo "create release_uploads error: $(cat $RESPONSE | jq -r '.message')"
