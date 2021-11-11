@@ -104,7 +104,7 @@ response=$(curl -d POST \
 chunk_size=$(echo $response | jq -j '.chunk_size')
 
 mkdir -p /tmp/chunks
-split -b $chunk_size $binary_name /tmp/chunks/chunk
+split -b $chunk_size $file_path /tmp/chunks/chunk
 block_number=0
 for i in /tmp/chunks/chunk*; do
     echo "uploading chunk $block_number..."
@@ -128,7 +128,7 @@ curl -d POST \
      -H "X-API-Token: $API_TOKEN" \
      "$finished_url"
 
-commit_url="https://api.appcenter.ms/v0.1/apps/$OWNER_NAME/$APP_NAME/uploads/releases/$upload_id"
+commit_url="https://api.appcenter.ms/v0.1/apps/$OWNER/$APP_NAME/uploads/releases/$upload_id"
 curl -H "Content-Type: application/json" \
      -H "Accept: application/json" \
      -H "X-API-Token: $API_TOKEN" \
@@ -137,7 +137,7 @@ curl -H "Content-Type: application/json" \
      $commit_url
 
 echo "getting release ID..."
-release_status_url="https://api.appcenter.ms/v0.1/apps/$OWNER_NAME/$APP_NAME/uploads/releases/$upload_id"
+release_status_url="https://api.appcenter.ms/v0.1/apps/$OWNER/$APP_NAME/uploads/releases/$upload_id"
 poll_result=$(curl -H "Content-Type: application/json" \
                    -H "Accept: application/json" \
                    -H "X-API-Token: $API_TOKEN" \
