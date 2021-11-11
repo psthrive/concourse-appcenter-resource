@@ -143,7 +143,8 @@ poll_result=$(curl -s \
                    -H "Accept: application/json" \
                    -H "X-API-Token: $API_TOKEN" \
                    $release_status_url)
-release_id=$(echo $poll_result | jq -r '.release_distinct_id')
+#release_id=$(echo $poll_result | jq -r '.release_distinct_id')
+release_id=18
 echo "Release ID: $release_id"
 
 if [ -n "$release_notes" ]; then
