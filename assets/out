@@ -138,11 +138,12 @@ curl -H "Content-Type: application/json" \
 
 echo "getting release ID..."
 release_status_url="https://api.appcenter.ms/v0.1/apps/$OWNER/$APP_NAME/uploads/releases/$upload_id"
-poll_result=$(curl -H "Content-Type: application/json" \
+poll_result=$(curl -s \
+                   -H "Content-Type: application/json" \
                    -H "Accept: application/json" \
                    -H "X-API-Token: $API_TOKEN" \
                    $release_status_url)
-release_id=$(echo $poll_result | jq -r '.id')
+release_id=$(echo $poll_result | jq -r '.release_distinct_id')
 echo "Release ID: $release_id"
 
 if [ -n "$release_notes" ]; then
