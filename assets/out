@@ -38,7 +38,7 @@ fi
 source $(dirname $0)/api.sh
 
 path=$(jq -r '.params.path // ""' < $payload)
-binary_name=$(jq --arg dn $app_name -r '.params.binary_name // $dn' < $payload)
+binary_name=$(jq -r '.params.binary_name // ""' < $payload)
 release_notes=$(jq -r '.params.release_notes // ""' < $payload)
 
 if [ -z "$TYPE" ]; then
