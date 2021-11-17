@@ -136,16 +136,29 @@ curl -H "Content-Type: application/json" \
      -X PATCH \
      $commit_url
 
+
+
+## Getting release ID by polling
+
 echo "getting release ID..."
+upload_status=""
+while [ "$upload_status" != "readyToBePublished" ]
+do
 release_status_url="https://api.appcenter.ms/v0.1/apps/$OWNER/$APP_NAME/uploads/releases/$upload_id"
 poll_result=$(curl -s \
                    -H "Content-Type: application/json" \
-                   -H "Accept: application/json" \
+                   -H "Accept: application/json"  \
                    -H "X-API-Token: $API_TOKEN" \
                    $release_status_url)
-#release_id=$(echo $poll_result | jq -r '.release_distinct_id')
-release_id=18
+echo "poll res : $poll_result"
+release_id=$(echo $poll_result | jq -r '.release_distinct_id')
+upload_status=$(echo $poll_result | jq -r '.upload_status')
 echo "Release ID: $release_id"
+echo "upload_status: $upload_status"
+done
+
+
+
 
 if [ -n "$release_notes" ]; then
   put_release_notes $release_id $release_notes
