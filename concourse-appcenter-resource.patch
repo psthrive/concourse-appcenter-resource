@@ -1,0 +1,198 @@
+diff --git a/Dockerfile b/Dockerfile
+index d0f34cc..a708c1c 100644
+--- a/Dockerfile
++++ b/Dockerfile
+@@ -1,6 +1,5 @@
+ FROM ubuntu:bionic
+-LABEL maintainer="Tomoyuki Murakami <tomoyukim@outlook.com>"
+-
++LABEL maintainer="Shashank Savanth <savanth.shashank@gmail.com>"
+ COPY assets/* /opt/resource/
+ 
+ RUN set -eux; \
+diff --git a/assets/api.sh b/assets/api.sh
+index d83848b..b7a914a 100755
+--- a/assets/api.sh
++++ b/assets/api.sh
+@@ -12,7 +12,7 @@ create_release_uploads() {
+   --header 'Accept: application/json' \
+   --header "X-API-Token: $API_TOKEN" \
+   -o $RESPONSE \
+-  "https://api.appcenter.ms/v0.1/apps/$OWNER/$APP_NAME/release_uploads")
++  "https://api.appcenter.ms/v0.1/apps/$OWNER/$APP_NAME/uploads/releases")
+ 
+   if [ $status -lt 200 ] || [ $status -gt 299 ]; then
+     echo "create release_uploads error: $(cat $RESPONSE | jq -r '.message')"
+@@ -52,7 +52,7 @@ update_release_uploads_status() {
+   --header "X-API-Token: $API_TOKEN" \
+   -o $RESPONSE \
+   --data "{ \"status\": \"$rel_status\"}" \
+-  "https://api.appcenter.ms/v0.1/apps/$OWNER/$APP_NAME/release_uploads/$upload_id")
++  "https://api.appcenter.ms/v0.1/apps/$OWNER/$APP_NAME/uploads/releases/$upload_id")
+ 
+   if [ $status -lt 200 ] || [ $status -gt 299 ]; then
+     echo "update release_uploads status error: $(cat $RESPONSE | jq -r '.message')"
+@@ -121,4 +121,4 @@ distribute_store() {
+     echo "distribute stores error: $(cat $RESPONSE | jq -r '.message')"
+     exit 1
+   fi
+-}
+\ No newline at end of file
++}
+diff --git a/assets/out b/assets/out
+index 9b832ed..20db936 100755
+--- a/assets/out
++++ b/assets/out
+@@ -18,6 +18,7 @@ cat > $payload <&0
+ export API_TOKEN=$(jq -r '.source.api_token // ""' < $payload)
+ export OWNER=$(jq -r '.source.owner // ""' < $payload)
+ export APP_NAME=$(jq -r '.source.app_name // ""' < $payload)
++export TYPE=$(jq -r '.source.type // ""' < $payload)
+ 
+ if [ -z "$API_TOKEN" ]; then
+   echo "invalid payload (missing token)"
+@@ -37,26 +38,127 @@ fi
+ source $(dirname $0)/api.sh
+ 
+ path=$(jq -r '.params.path // ""' < $payload)
+-binary_name=$(jq --arg dn $app_name -r '.params.binary_name // $dn' < $payload)
++binary_name=$(jq -r '.params.binary_name // ""' < $payload)
+ release_notes=$(jq -r '.params.release_notes // ""' < $payload)
+ 
++if [ -z "$TYPE" ]; then
++  ext=${binary_name##*.}
++  case $ext in
++    apk)
++      TYPE=android
++      ;;
++    ipa)
++      TYPE=ios
++      ;;
++    *)
++      echo "could not determine file type for $binary_name"
++      exit 1
++  esac
++fi
++
+ ## release uploads
+ cd $source/$path
+ 
++echo "creating release upload"
+ response=$(create_release_uploads)
+-url=$(echo $response | jq -r '.upload_url')
++# url=$(echo $response | jq -r '.upload_url')
+ 
+ echo "file uploading..."
+-status=$(curl -w %{http_code} -F "ipa=@$binary_name" $url)
++# status=$(curl -w %{http_code} -F "ipa=@$binary_name" $url)
++
++# if [ $status -lt 200 ] || [ $status -gt 299 ]; then
++#   echo "api error: $(echo $response | jq -r '.message')"
++#   exit 1
++# fi
++
++# upload_id=$(echo $response | jq -r '.upload_id')
++# release_id=$(update_release_uploads_status $upload_id "committed" | jq -r '.release_id')
++
++url_encoded_token=$(echo $response | jq -j '.url_encoded_token')
++package_asset_id=$(echo $response | jq -j '.package_asset_id')
++upload_id=$(echo $response | jq -j '.id')
++upload_domain=$(echo $response | jq -j '.upload_domain')
++file_path=$(echo $(find `pwd` -name 555Phone.apk))
++file_size_bytes=$(wc -c $file_path | awk '{print $1}')
++echo "file size in bytes : $file_size_bytes"
++case "$TYPE" in
++    android)
++        app_type='application/vnd.android.package-archive'
++        ;;
++    ios)
++        app_type='application/octet-stream'
++        ;;
++    *)
++        echo "invalid type '$TYPE'; must be either 'android' or 'ios'"
++        exit 1
++        ;;
++esac
++
++metadata_url="https://file.appcenter.ms/upload/set_metadata/$package_asset_id?file_name=$binary_name&file_size=$file_size_bytes&token=$url_encoded_token&content_type=$app_type"
++
++response=$(curl -d POST \
++                -H "Content-Type: application/json" \
++                -H "Accept: application/json" \
++                -H "X-API-Token: $API_TOKEN" \
++                "$metadata_url")
++chunk_size=$(echo $response | jq -j '.chunk_size')
++
++mkdir -p /tmp/chunks
++split -b $chunk_size $file_path /tmp/chunks/chunk
++block_number=0
++for i in /tmp/chunks/chunk*; do
++    echo "uploading chunk $block_number..."
++    block_number=$(($block_number + 1))
++    content_length=$(wc -c "$i" | awk '{print $1}')
++
++    upload_chunk_url="https://file.appcenter.ms/upload/upload_chunk/$package_asset_id?token=$url_encoded_token&block_number=$block_number"
++
++    curl -X POST \
++         --data-binary "@$i" \
++         -H "Content-Length: $content_length" \
++         -H "Content-Type: $app_type" \
++         $upload_chunk_url
++done
++
++echo "marking upload finished"
++finished_url="https://file.appcenter.ms/upload/finished/$package_asset_id?token=$url_encoded_token"
++curl -d POST \
++     -H "Content-Type: application/json" \
++     -H "Accept: application/json" \
++     -H "X-API-Token: $API_TOKEN" \
++     "$finished_url"
++
++commit_url="https://api.appcenter.ms/v0.1/apps/$OWNER/$APP_NAME/uploads/releases/$upload_id"
++curl -H "Content-Type: application/json" \
++     -H "Accept: application/json" \
++     -H "X-API-Token: $API_TOKEN" \
++     --data '{"upload_status": "uploadFinished","id": "$upload_id"}' \
++     -X PATCH \
++     $commit_url
++
++
++
++## Getting release ID by polling
++
++echo "getting release ID..."
++upload_status=""
++while [ "$upload_status" != "readyToBePublished" ]
++do
++release_status_url="https://api.appcenter.ms/v0.1/apps/$OWNER/$APP_NAME/uploads/releases/$upload_id"
++poll_result=$(curl -s \
++                   -H "Content-Type: application/json" \
++                   -H "Accept: application/json"  \
++                   -H "X-API-Token: $API_TOKEN" \
++                   $release_status_url)
++echo "poll res : $poll_result"
++release_id=$(echo $poll_result | jq -r '.release_distinct_id')
++upload_status=$(echo $poll_result | jq -r '.upload_status')
++echo "Release ID: $release_id"
++echo "upload_status: $upload_status"
++done
++
+ 
+-if [ $status -lt 200 ] || [ $status -gt 299 ]; then
+-  echo "api error: $(echo $response | jq -r '.message')"
+-  exit 1
+-fi
+ 
+-upload_id=$(echo $response | jq -r '.upload_id')
+-release_id=$(update_release_uploads_status $upload_id "committed" | jq -r '.release_id')
+-echo "Release ID: $release_id"
+ 
+ if [ -n "$release_notes" ]; then
+   put_release_notes $release_id $release_notes
+@@ -79,4 +181,4 @@ else
+   echo "distribution skipped."
+ fi
+ 
+-printf '{"version":{}}' >&3
+\ No newline at end of file
++printf '{"version":{}}' >&3
