@@ -15,6 +15,8 @@ Concourse resource for distributing a build artifact to Microsoft [App Center](h
   - `notify_testers`: Optional. (default value is false)
 - Distribute to store
   - `store_id`: Required.
+- Artifact Type
+  - `type`: Required.
 
 ### Example
 ```yaml
@@ -33,7 +35,7 @@ resources:
     owner: your_owner_name
     app_name: your_app_name
     group_id: your_group_id
-    type: android or iOS
+    type: android or ios
 ```
 ## Bahavior
 
