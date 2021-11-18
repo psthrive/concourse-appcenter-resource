@@ -22,7 +22,7 @@ resource_types:
 - name: appcenter
   type: docker-image
   source:
-    repository: tomoyukim/concourse-appcenter-resource
+    repository: shashanksavanth/concourse-appcenter-resource
     tag: latest
 
 resources:
