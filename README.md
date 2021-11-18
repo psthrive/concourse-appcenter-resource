@@ -33,6 +33,7 @@ resources:
     owner: your_owner_name
     app_name: your_app_name
     group_id: your_group_id
+    type: android or iOS
 ```
 ## Bahavior
 
