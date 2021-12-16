@@ -78,7 +78,7 @@ url_encoded_token=$(echo $response | jq -j '.url_encoded_token')
 package_asset_id=$(echo $response | jq -j '.package_asset_id')
 upload_id=$(echo $response | jq -j '.id')
 upload_domain=$(echo $response | jq -j '.upload_domain')
-file_path=$(echo $(find `pwd` -name 555Phone.apk))
+file_path=$(echo $(find `pwd` -name $binary_name))
 file_size_bytes=$(wc -c $file_path | awk '{print $1}')
 echo "file size in bytes : $file_size_bytes"
 case "$TYPE" in
